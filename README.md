@@ -30,7 +30,7 @@ rl-cloud-resource-allocator/
 
 # Installation & Setup
 
-1. Clone the repository
+1.  Clone the repository
 git clone https://github.com/backpropBoi/rl-cloud-resource-allocator.git
 cd rl-cloud-resource-allocator
 
