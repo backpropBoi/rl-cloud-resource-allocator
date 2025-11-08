@@ -12,19 +12,18 @@ A Streamlit dashboard is included to visualize training metrics and run live sim
 rl-cloud-resource-allocator/
 │
 ├── app/
-│   └── streamlit_dashboard.py        # Streamlit dashboard UI
+│   └── streamlit_dashboard.py       
 │
 ├── src/
 │   ├── envs/
-│   │   └── cloud_env.py              # Custom cloud environment (Gym-based)
-│   ├── train_sac.py                  # Script to train the SAC model
+│   │   └── cloud_env.py              
+│   ├── train_sac.py                  
 │
 ├── models/
-│   └── sac_cloud_final.zip           # Trained SAC model
+│   └── sac_cloud_final.zip           
 │
 ├── logs/
-│   └── training_log.csv              # Episode reward and loss logs
-│
+│   └── training_log.csv              
 ├── requirements.txt
 └── README.md
 
