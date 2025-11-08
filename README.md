@@ -12,7 +12,6 @@ A Streamlit dashboard is included to visualize training metrics and run live sim
 
 1.  Clone the repository
 git clone https://github.com/backpropBoi/rl-cloud-resource-allocator.git
-cd rl-cloud-resource-allocator
 
 2️. Install dependencies
 pip install -r requirements.txt
