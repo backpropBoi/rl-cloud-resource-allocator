@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rl-cloud-resource-allocator"
+version = "0.2.0"
+description = "SAC-based RL agent for dynamic cloud resource allocation"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "gymnasium>=1.0.0",
+    "stable-baselines3>=2.4.0",
+    "torch>=2.0.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "streamlit>=1.28.0",
+    "matplotlib>=3.7.0",
+    "pyyaml>=6.0",
+    "tqdm>=4.66.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
