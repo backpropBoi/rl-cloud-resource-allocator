@@ -178,8 +178,8 @@ def evaluate_all(
             done = False
             while not done:
                 action, _ = model.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, info = venv.step(action)
-                done = bool(terminated[0]) or bool(truncated[0])
+                obs, reward, done, info = venv.step(action)
+                done = bool(done[0])
                 step_info = info[0]
                 metrics.total_reward += float(reward[0])
                 metrics.throughput += step_info.get("finished", 0)

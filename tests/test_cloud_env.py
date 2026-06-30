@@ -21,7 +21,7 @@ def test_reset_clears_state(env):
     assert env.current_workers == env.min_workers
     assert env.jobs_dropped == 0
     assert len(env.history["throughput"]) == 0
-    assert obs.shape == (8,)
+    assert obs.shape == (10,)
     assert np.all(obs >= 0.0) and np.all(obs <= 1.0)
 
 
@@ -94,7 +94,7 @@ def test_gym_registration():
 
     env = gym.make("CloudAlloc-v0")
     obs, _ = env.reset()
-    assert obs.shape == (8,)
+    assert obs.shape == (10,)
     env.close()
 
 

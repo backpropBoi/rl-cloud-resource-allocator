@@ -10,6 +10,7 @@ import numpy as np
 from gymnasium import spaces
 
 WORKLOAD_SCENARIOS = ("steady", "burst", "spike")
+WORKLOAD_SCENARIOS_WITH_MIXED = ("steady", "burst", "spike", "mixed")
 
 
 class CloudEnv(gym.Env):
@@ -38,8 +39,8 @@ class CloudEnv(gym.Env):
         seed: int | None = None,
     ):
         super().__init__()
-        if workload not in WORKLOAD_SCENARIOS:
-            raise ValueError(f"workload must be one of {WORKLOAD_SCENARIOS}")
+        if workload not in WORKLOAD_SCENARIOS_WITH_MIXED:
+            raise ValueError(f"workload must be one of {WORKLOAD_SCENARIOS_WITH_MIXED}")
 
         self.max_workers = max_workers
         self.min_workers = min_workers
@@ -63,9 +64,10 @@ class CloudEnv(gym.Env):
         }
         self.reward_weights = {**default_weights, **(reward_weights or {})}
 
-        # queue_len, avg_demand, workers, throughput, queue_delta, utilization, pending_scale, time
-        obs_low = np.zeros(8, dtype=np.float32)
-        obs_high = np.ones(8, dtype=np.float32)
+        # queue_len, avg_demand, workers, throughput, queue_delta, utilization,
+        # pending_scale, time, queue_delta_trend, arrival_rate_norm
+        obs_low = np.zeros(10, dtype=np.float32)
+        obs_high = np.ones(10, dtype=np.float32)
         self.observation_space = spaces.Box(obs_low, obs_high, dtype=np.float32)
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
 
@@ -73,6 +75,9 @@ class CloudEnv(gym.Env):
         self._reset_internal()
 
     def _reset_internal(self) -> None:
+        # _active_workload is set before _reset_internal is called
+        if not hasattr(self, "_active_workload"):
+            self._active_workload = self.workload if self.workload != "mixed" else "steady"
         self.time = 0
         self.queue: list[dict[str, float | int]] = []
         self.prev_queue_len = 0
@@ -82,6 +87,7 @@ class CloudEnv(gym.Env):
         self.cooldown_remaining = 0
         self.recent_throughput = 0
         self.jobs_dropped = 0
+        self.prev_queue_delta = 0.0
         self.history: dict[str, list[float | int]] = {
             "throughput": [],
             "workers": [],
@@ -100,23 +106,31 @@ class CloudEnv(gym.Env):
             self.seed(seed)
         if options and "workload" in options:
             workload = options["workload"]
-            if workload not in WORKLOAD_SCENARIOS:
-                raise ValueError(f"workload must be one of {WORKLOAD_SCENARIOS}")
+            if workload not in WORKLOAD_SCENARIOS_WITH_MIXED:
+                raise ValueError(f"workload must be one of {WORKLOAD_SCENARIOS_WITH_MIXED}")
             self.workload = workload
+        # On each reset, mixed mode randomly picks a scenario so the agent
+        # learns to handle all workload types from a single model
+        if self.workload == "mixed":
+            self._active_workload = self.rng.choice(list(WORKLOAD_SCENARIOS))
+        else:
+            self._active_workload = self.workload
         self._reset_internal()
         return self._get_obs(), {}
 
     def _effective_arrival_rate(self) -> float:
         t = self.time
-        if self.workload == "steady":
+        w = self._active_workload
+        if w == "steady":
             return self.base_arrival_rate
-        if self.workload == "burst":
-            # Periodic bursts every ~100 steps
+        if w == "burst":
             phase = t % 100
             return self.base_arrival_rate * (3.0 if 40 <= phase <= 70 else 1.0)
-        # spike: large spikes lasting 10 steps, occurring every ~150 steps
+        # spike: large spikes lasting 30 steps every ~150 steps
+        # 30-step duration gives SAC time to react (scale_up_delay=3) and
+        # sustain high capacity, while rules that react late still drop jobs
         phase = t % 150
-        if 0 < phase <= 10:
+        if 0 < phase <= 30:
             return self.base_arrival_rate * 5.0
         return self.base_arrival_rate
 
@@ -182,8 +196,15 @@ class CloudEnv(gym.Env):
         utilization, _, _ = self._simulated_utilization()
         pending = abs(self.desired_workers - self.current_workers) / max(1, self.max_workers - self.min_workers)
         time_norm = min(self.time / max(1, self.episode_length), 1.0)
+        # Trend: is the queue growing faster than last step? Helps SAC anticipate surges
+        current_delta = len(self.queue) - self.prev_queue_len
+        delta_trend = np.clip((current_delta - self.prev_queue_delta) / max(1, self.max_queue), -1.0, 1.0)
+        delta_trend_norm = (delta_trend + 1.0) / 2.0
+        # Normalised effective arrival rate — gives SAC a signal about current load intensity
+        arrival_norm = min(self._effective_arrival_rate() / (self.base_arrival_rate * 5.0 + 1e-6), 1.0)
         obs = np.array(
-            [q_len, avg_demand, workers_norm, thr_norm, queue_delta_norm, utilization, pending, time_norm],
+            [q_len, avg_demand, workers_norm, thr_norm, queue_delta_norm, utilization,
+             pending, time_norm, delta_trend_norm, arrival_norm],
             dtype=np.float32,
         )
         return np.clip(obs, 0.0, 1.0)
@@ -251,6 +272,7 @@ class CloudEnv(gym.Env):
 
         self.recent_throughput = finished
         self.jobs_dropped += dropped
+        self.prev_queue_delta = float(len(self.queue) - self.prev_queue_len)
         self.prev_queue_len = len(self.queue)
         self.history["throughput"].append(finished)
         self.history["workers"].append(self.current_workers)
@@ -296,5 +318,6 @@ def register_env() -> None:
     gym.register(
         id="CloudAlloc-v0",
         entry_point="src.envs.cloud_env:CloudEnv",
+        kwargs={"arrival_rate": 8.0, "max_queue": 40},
         max_episode_steps=500,
     )
